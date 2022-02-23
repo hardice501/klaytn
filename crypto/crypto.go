@@ -34,6 +34,7 @@ import (
 
 	"github.com/klaytn/klaytn/common"
 	"github.com/klaytn/klaytn/common/math"
+	bn256 "github.com/klaytn/klaytn/crypto/bn256/google"
 	"github.com/klaytn/klaytn/crypto/sha3"
 	"github.com/klaytn/klaytn/rlp"
 )
@@ -46,6 +47,14 @@ const RecoveryIDOffset = 64
 
 // DigestLength sets the signature digest exact length
 const DigestLength = 32
+
+//MiMC7
+var MiMC7Seed = Keccak256([]byte("mimc7_seed"))
+
+//poseidon
+var NROUNDSP = []int{56, 57, 56, 60, 60, 63, 64, 63, 60, 66, 60, 65, 70, 60, 64, 68}
+
+const NROUNDSF = 8
 
 var (
 	secp256k1N, _  = new(big.Int).SetString("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141", 16)
@@ -81,6 +90,102 @@ func Keccak512(data ...[]byte) []byte {
 		d.Write(b)
 	}
 	return d.Sum(nil)
+}
+
+func MiMC7(data []byte) []byte {
+	result := make([]byte, 32)
+	no_padd := make([]byte, 32)
+	m := new(big.Int).SetBytes(data[0:32])
+	if len(data) <= 32 {
+		no_padd = mimc7round(m, m).Bytes()
+	} else {
+		for i := 32; i < len(data); i += 32 {
+			key := new(big.Int).SetBytes(data[i : i+32])
+			m = mimc7round(m, key)
+		}
+		no_padd = m.Bytes()
+	}
+	copy(result[32-len(no_padd):], no_padd[:])
+	return result
+}
+
+func mimc7round(m *big.Int, key *big.Int) *big.Int {
+	c := new(big.Int)
+	ex := big.NewInt(7)
+	c.Add(m, key).Exp(c, ex, bn256.Order)
+	R_ := new(big.Int).SetBytes(MiMC7Seed)
+	for i := 0; i < 90; i += 1 {
+		R := Keccak256(R_.Bytes())
+		R_ = new(big.Int).SetBytes(R)
+		c.Add(c, key).Add(c, R_).Exp(c, ex, bn256.Order)
+	}
+	c.Add(c, key).Add(c, m).Add(c, key).Mod(c, bn256.Order)
+	return c
+}
+
+func Poseidon(data []byte) []byte {
+	result := make([]byte, 32)
+	t := (len(data)-31)/32 + 1
+	inputs := make([]*big.Int, t)
+	j := 0
+	for i := 0; i < len(data); i += 32 {
+		inputs[j] = big.NewInt(0).SetBytes(data[i : i+32])
+		j++
+	}
+	no_padd := poseidon256(inputs).Bytes()
+	copy(result[32-len(no_padd):], no_padd[:])
+	return result
+}
+
+func poseidon256(input []*big.Int) *big.Int {
+	t := len(input) + 1
+	nRoundsFDiv2 := NROUNDSF / 2
+	nRoundsP := NROUNDSP[t-2]
+	tmp := big.NewInt(0)
+	tmp1 := big.NewInt(1)
+	tmp2 := big.NewInt(3)
+	tmp2.Add(tmp, tmp1)
+	C := PoseidonConstant.c[t-2]
+	S := PoseidonConstant.s[t-2]
+	M := PoseidonConstant.m[t-2]
+	P := PoseidonConstant.p[t-2]
+	state := make([]*big.Int, t)
+	state[0] = big.NewInt(0)
+	for i := 0; i < t-1; i++ {
+		state[i+1] = big.NewInt(0).Set(input[i])
+	}
+	ArrAdd(state, C, 0) //state = state + C[:]
+	for i := 0; i < nRoundsFDiv2-1; i++ {
+		ArrExp5(state)              // state = state^5
+		ArrAdd(state, C, (i+1)*t)   // state = state[:] + C[(i+1)*t: ] -> loop len(state)
+		state = VecMatMul(state, M) // state = state * M
+	}
+	ArrExp5(state)                     // state = state^5
+	ArrAdd(state, C, (nRoundsFDiv2)*t) // state = ...state[:] + ...C[nRoundsF/2*t: ] -> loop len(state)
+	state = VecMatMul(state, P)        // state = state * P ->  Vec=state;  Mat=P;
+	for i := 0; i < nRoundsP; i++ {
+		state[0].Exp(state[0], big.NewInt(5), bn256.Order) // state[0] = state[0]^5
+		state[0].Add(state[0], C[(nRoundsFDiv2+1)*t+i])    // state[0] += C[(nRoundsF/2+1)*t + i]
+		mul := big.NewInt(0)
+		newState0 := big.NewInt(0)
+		for j := 0; j < t; j++ {
+			mul.Mul(S[(t*2-1)*i+j], state[j]) // mul = S[(t*2-1)*i+j] * state[j]
+			newState0.Add(newState0, mul)     // newState0 += mul
+		}
+		for k := 1; k < t; k++ {
+			mul.Mul(state[0], S[(t*2-1)*i+t+k-1]) // mul = state[0] * S[(t*2-1)*i+t+k-1]
+			state[k].Add(state[k], mul)           // state[k] += mul
+		}
+		state[0] = newState0 //state[0] = newState0
+	}
+	for i := 0; i < nRoundsFDiv2-1; i++ {
+		ArrExp5(state)                                  // state = [(...state)^5]
+		ArrAdd(state, C, (nRoundsFDiv2+1+i)*t+nRoundsP) // state = state + C[(nRoundsF/2+1)*t+sP[t-2]+i*t:] -> loop len(state)
+		state = VecMatMul(state, M)                     // state = state * M ->  Vec=state;  Mat=M;
+	}
+	ArrExp5(state)              // state = [(...state)^5]
+	state = VecMatMul(state, M) // state = state * M ->  Vec=state;  Mat=M;
+	return state[0]             // hash result = state[0]
 }
 
 // CreateAddress creates a Klaytn address given the bytes and the nonce
@@ -225,4 +330,34 @@ func zeroBytes(bytes []byte) {
 	for i := range bytes {
 		bytes[i] = 0
 	}
+}
+
+func ArrExp(x []*big.Int, y *big.Int) {
+	for i := 0; i < len(x); i++ {
+		x[i].Exp(x[i], y, bn256.Order)
+	}
+}
+func ArrExp5(x []*big.Int) {
+	ArrExp(x, big.NewInt(5))
+}
+
+// addArray computes x = x[:] + y[mv:]
+func ArrAdd(x []*big.Int, y []*big.Int, mv int) {
+	for i := 0; i < len(x); i++ {
+		x[i].Add(x[i], y[mv+i]) //.Mod(x[i], ff.Modulus())
+	}
+}
+func VecMatMul(x []*big.Int, y [][]*big.Int) []*big.Int {
+	l := len(x)
+	result := make([]*big.Int, l)
+	mul := new(big.Int)
+	for i := 0; i < l; i++ {
+		result[i] = big.NewInt(0)
+		for j := 0; j < l; j++ {
+			mul.Mul(y[j][i], x[j])
+			result[i].Add(result[i], mul)
+		}
+		result[i].Mod(result[i], bn256.Order)
+	}
+	return result
 }

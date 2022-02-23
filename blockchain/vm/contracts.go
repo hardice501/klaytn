@@ -49,6 +49,13 @@ var (
 	errWrongSignatureLength = errors.New("wrong signature length")
 )
 
+var (
+	MiMC7PerWordGas                uint64 = 6930
+	MiMC7PerWordComputationCost    uint64 = 150000
+	PoseidonPerWordGas             uint64 = 6930
+	PoseidonPerWordComputationCost uint64 = 150000
+)
+
 // PrecompiledContract is the basic interface for native Go contracts. The implementation
 // requires a deterministic gas count based on the input size of the Run method of the
 // contract.
@@ -78,6 +85,8 @@ var PrecompiledContractsConstantinople = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{9}):  &vmLog{},
 	common.BytesToAddress([]byte{10}): &feePayer{},
 	common.BytesToAddress([]byte{11}): &validateSender{},
+	common.BytesToAddress([]byte{19}): &mimc7{},
+	common.BytesToAddress([]byte{20}): &poseidon{},
 }
 
 // DO NOT USE 0x3FD, 0x3FE, 0x3FF ADDRESSES BEFORE ISTANBUL CHANGE ACTIVATED.
@@ -96,6 +105,8 @@ var PrecompiledContractsIstanbul = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{3, 253}): &vmLog{},
 	common.BytesToAddress([]byte{3, 254}): &feePayer{},
 	common.BytesToAddress([]byte{3, 255}): &validateSender{},
+	common.BytesToAddress([]byte{19}):     &mimc7{},
+	common.BytesToAddress([]byte{20}):     &poseidon{},
 }
 
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
@@ -162,6 +173,31 @@ func (c *sha256hash) GetRequiredGasAndComputationCost(input []byte) (uint64, uin
 }
 func (c *sha256hash) Run(input []byte, contract *Contract, evm *EVM) ([]byte, error) {
 	h := sha256.Sum256(input)
+	return h[:], nil
+}
+
+type mimc7 struct{}
+
+func (c *mimc7) GetRequiredGasAndComputationCost(input []byte) (uint64, uint64) {
+	input_len := uint64(len(input)+31) / 32
+	if input_len < 3 {
+		return MiMC7PerWordGas, MiMC7PerWordComputationCost
+	}
+	return (input_len - 1) * MiMC7PerWordGas, (input_len - 1) * MiMC7PerWordComputationCost
+}
+func (c *mimc7) Run(input []byte, contract *Contract, evm *EVM) ([]byte, error) {
+	h := crypto.MiMC7(input)
+	return h[:], nil
+}
+
+type poseidon struct{}
+
+func (c *poseidon) GetRequiredGasAndComputationCost(input []byte) (uint64, uint64) {
+	input_len := uint64(len(input)+31) / 32
+	return input_len * PoseidonPerWordGas, input_len * PoseidonPerWordComputationCost
+}
+func (c *poseidon) Run(input []byte, contract *Contract, evm *EVM) ([]byte, error) {
+	h := crypto.Poseidon(input)
 	return h[:], nil
 }
 
