@@ -1,0 +1,58 @@
+#!/bin/bash
+help()
+{
+    cat << HELP
+Usage:
+    klay <command> <value>
+The commands are:
+       setup value      Same as '$ cp build/bin/k*n corecell/*n/bin/k*n.value' (value is program version. ex: 1.0.2)
+       init value       Delete all nodes & init nodes(value is program version)
+       start            Start kcn,kpn,ken(CCN & EN)
+       status           Show CCN, EN status
+       stop             Stop all network
+       attach value     Attach to value(value:cn,pn,en)
+       log value        Show value's log(value:cn,pn,en)
+       remvdata         remove chain data 
+HELP
+exit 0
+}
+
+# Check if the option exists
+DIR=`dirname "$0"`
+cd $DIR
+
+
+
+CORECELL=$PWD/corecell
+
+ARGULEN=${#@}
+TWO=2
+ZERO=0
+if [ $ARGULEN -eq $ZERO ] ; then
+  help
+  exit 0
+elif [ $ARGULEN -gt $TWO ] ; then
+  echo "Error: Too many arguments"
+  exit 0
+elif [ $1 = "help" ] ; then
+    help
+elif [ $1 = "setup" ] ; then
+    bash $CORECELL/1_copy_binary.sh $2
+elif [ $1 = "init" ] ; then
+    bash $CORECELL/2_initialize_nodes.sh $2
+elif [ $1 = "remvdata" ] ; then
+    bash $CORECELL/2-1.deletedata.sh
+elif [ $1 = "start" ] ; then
+    bash $CORECELL/3_ccstart.sh
+elif [ $1 = "stop" ] ; then
+    bash $CORECELL/4_ccstop.sh
+elif [ $1 = "status" ] ; then
+    bash $CORECELL/7_status.sh
+elif [ $1 = "log" ] ; then
+    bash $CORECELL/6_logs.sh $2
+elif [ $1 = "attach" ] ; then
+    bash $CORECELL/5_attach.sh $2
+else
+    echo "Error: command not found"
+    exit 0
+fi
