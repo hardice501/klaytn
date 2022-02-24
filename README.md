@@ -17,7 +17,7 @@ Changed Go-lang version :
 ```
 sudo rm -rf /usr/local/go
 sudo tar -C /usr/local -xzf ./go1.*.*.****-****.tar.*
-```
+```ss
 
 
 Changed Truffle version :  
@@ -67,6 +67,7 @@ The commands are:
 Default Shell : zsh
 ```
 echo "export PATH=\$PATH:`pwd`" >> ~/.zshrc
+source ~/.zshrc
 make all
 klay setup 1.0.0
 klay init 1.0.0
@@ -75,6 +76,7 @@ klay start
 Default Shell : bash
 ```
 echo "export PATH=\$PATH:`pwd`" >> ~/.bashrc
+source ~/.zshrc
 make all
 klay setup 1.0.0
 klay init 1.0.0
@@ -93,5 +95,5 @@ In truffle console(call hashfunction and show logs)
 > let pre = await Precompiled.deployed()
 > pre.callmimc(["0x0000000000000000000000000000000000000000000000000000000000000000"])
 > pre.callposeidon(["0x0000000000000000000000000000000000000000000000000000000000000001"])
-> await test.getPastEvents("showbytes32",{ fromBlock:0, toBlock:'latest'})
+> await pre.getPastEvents("showbytes32",{ fromBlock:0, toBlock:'latest'})
 ```
