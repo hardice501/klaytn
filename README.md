@@ -3,9 +3,44 @@
 [![codecov](https://codecov.io/gh/klaytn/klaytn/branch/dev/graph/badge.svg)](https://codecov.io/gh/klaytn/klaytn)
 [![GoDoc](https://godoc.org/github.com/klaytn/klaytn?status.svg)](https://pkg.go.dev/github.com/klaytn/klaytn)
 
-# Klaytn
+# Klaytn + Precompiled Contract(MiMC7, Poseidon)
 
 Official golang implementation of the Klaytn protocol. Please visit [KlaytnDocs](https://docs.klaytn.com/) for more details on Klaytn design, node operation guides and application development resources.
+
+## MiMC
+MiMC7 is mapped to Opcode 0x13.  
+Detail MiMC protocol : https://eprint.iacr.org/2016/492.pdf  
+Detail MiMC7 protocol : https://iden3-docs.readthedocs.io/en/latest/_downloads/a04267077fb3fdbf2b608e014706e004/Ed-DSA.pdf  
+MiMC7 algorithm :  
+```
+SEED = keccak256("mimc7_seed")
+ORDER = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+
+function MiMC7(inputs)
+  if len(inputs) <= 1 then
+    output = mimc7round(inputs[0], inputsinputs[0])
+  else
+    output = input[0]
+    for i = 1 to i < len(inputs) do
+      output = mimc7round(output, input[i])
+    endfor
+  endif
+  return output
+
+function mimc7round(m, key)
+  rc = keccak256(SEED)
+  c = (m + key)^7 mod ORDER // round 1
+  for i = 2 to i < 92 do    // round 2 ~ 91
+    c = (c + key + rc)^7 mod ORDER
+    rc = keccak256(rc)
+  endfor
+  output = (c + key + m + key) mod ORDER
+  return output
+```
+## Poseidon
+Poseidon is mapped to Opcode 0x14.  
+The Poseidon protocol referred to https://github.com/iden3/go-iden3-crypto/tree/master/poseidon  
+
 ## Require
 Go-lang version >= v1.16  
 Truffle version <= 5.1.25  <br/><br/>
@@ -80,8 +115,51 @@ truffle --network klaytn console
 ```
 In truffle console(call hashfunction and show logs)
 ```
-> let pre = await Precompiled.deployed()
-> pre.callmimc(["0x0000000000000000000000000000000000000000000000000000000000000000"])
-> pre.callposeidon(["0x0000000000000000000000000000000000000000000000000000000000000001"])
-> await pre.getPastEvents("showbytes32",{ fromBlock:0, toBlock:'latest'})
+let pre = await Precompiled.deployed()
+pre.callmimc(["0x0000000000000000000000000000000000000000000000000000000000000000"])
+pre.callposeidon(["0x0000000000000000000000000000000000000000000000000000000000000001"])
+await pre.getPastEvents("showbytes32",{ fromBlock:0, toBlock:'latest'})
+```
+
+## How to Use PreCompiled Contract MiMC7 in Solidity
+The input data must padded the remaining left side of 32bytes to "0". (ex 0x01 -> 0x0000000000000000000000000000000000000000000000000000000000000001)  
+If solidity version order than v0.5.0, use "gas" instead of "gas()" as the first factor in the call function.
+
+```
+pragma solidity >=0.5.0
+function callmimc(bytes32[] memory data) public returns (bytes32 result) {
+  uint256 len = data.length*32;
+  assembly {
+    let memPtr := mload(0x40)
+      let success := call(gas(), 0x13, 0, add(data, 0x20), len, memPtr, 0x20)
+      //solc -v < 0.5.0    let success := call(gas, 0x13, 0, add(data, 0x20), len, memPtr, 0x20)
+      switch success
+      case 0 {
+        revert(0,0)
+      } default {
+        result := mload(memPtr)
+      }
+  }
+}
+```
+
+## How to Use PreCompiled Contract Poseidon in Solidity
+The input data must padded the remaining left side of 32bytes to "0". (ex 0x01 -> 0x0000000000000000000000000000000000000000000000000000000000000001)  
+If solidity version order than v0.5.0, use "gas" instead of "gas()" as the first factor in the call function.
+```
+pragma solidity >=0.5.0
+function callposeidon(bytes32[] memory data) public returns (bytes32 result) {
+  uint256 len = data.length*32;
+  assembly {
+    let memPtr := mload(0x40)
+      let success := call(gas(), 0x14, 0, add(data, 0x20), len, memPtr, 0x20)
+      //let success := call(gas, 0x14, 0, add(data, 0x20), len, memPtr, 0x20)
+      switch success
+      case 0 {
+        revert(0,0)
+      } default {
+        result := mload(memPtr)
+      }
+  }
+}
 ```
