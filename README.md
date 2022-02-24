@@ -74,7 +74,7 @@ klay start
 ```
 Default Shell : bash
 ```
-echo "export PATH=\$PATH:`pwd`" >> ~/.zshrc
+echo "export PATH=\$PATH:`pwd`" >> ~/.bashrc
 make all
 klay setup 1.0.0
 klay init 1.0.0
