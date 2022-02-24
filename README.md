@@ -34,20 +34,19 @@ Once the dependencies are installed, run
 
     make all (or make {kcn, kpn, ken, kbn, kscn, kspn, ksen, kgen, homi, abigen})
 
-
 ## Export PATH
-
 Shell : zsh
 ```
 cd klaytn
-echo "export PATH=\$PATH:`PWD`" >> ~/.zshrc
+echo "export PATH=\$PATH:`pwd`" >> ~/.zshrc
 ```
 Shell : bash
 ```
 cd klaytn
-echo "export PATH=\$PATH:`PWD`" >> ~/.bashrc
+echo "export PATH=\$PATH:`pwd`" >> ~/.bashrc
 ```
-## How to run Klaytn local Network
+
+## How to use bash script(klaytn/klay)
 
 How to use script(klaytn/klay)
 ```
@@ -64,21 +63,22 @@ The commands are:
        remvdata         remove chain data
 ```
 
-Copy binary file build/bin to corecell/ and renamed project's specific version.(kcn -> kcn_1.0.0)
+## Run Local network 
+Default Shell : zsh
 ```
+echo "export PATH=\$PATH:`pwd`" >> ~/.zshrc
+make all
 klay setup 1.0.0
-```
-Switch binary file to specific project version and init Network(kcn_1.0.0 -> kcn)
-```
 klay init 1.0.0
-```
-Start All Network(kcn,kpn,ken)
-```
 klay start
 ```
-Stop All Network(kcn,kpn,ken)
+Default Shell : bash
 ```
-klay stop
+echo "export PATH=\$PATH:`pwd`" >> ~/.zshrc
+make all
+klay setup 1.0.0
+klay init 1.0.0
+klay start
 ```
 
 ## Test Deploy
