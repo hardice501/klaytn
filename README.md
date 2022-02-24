@@ -34,18 +34,6 @@ Once the dependencies are installed, run
 
     make all (or make {kcn, kpn, ken, kbn, kscn, kspn, ksen, kgen, homi, abigen})
 
-## Export PATH
-Shell : zsh
-```
-cd klaytn
-echo "export PATH=\$PATH:`pwd`" >> ~/.zshrc
-```
-Shell : bash
-```
-cd klaytn
-echo "export PATH=\$PATH:`pwd`" >> ~/.bashrc
-```
-
 ## How to use bash script(klaytn/klay)
 
 How to use script(klaytn/klay)
