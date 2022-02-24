@@ -34,7 +34,7 @@ Once the dependencies are installed, run
 
     make all (or make {kcn, kpn, ken, kbn, kscn, kspn, ksen, kgen, homi, abigen})
 
-## How to use bash script(klaytn/klay)
+## How to use shell script(klaytn/klay)
 
 How to use script(klaytn/klay)
 ```
