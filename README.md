@@ -17,7 +17,7 @@ Changed Go-lang version :
 ```
 sudo rm -rf /usr/local/go
 sudo tar -C /usr/local -xzf ./go1.*.*.****-****.tar.*
-```ss
+```
 
 
 Changed Truffle version :  
