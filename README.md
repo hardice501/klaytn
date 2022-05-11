@@ -87,26 +87,29 @@ The commands are:
 ```
 
 ## Run Local network 
-Default Shell : zsh
-```
-echo "export PATH=\$PATH:`pwd`" >> ~/.zshrc
-source ~/.zshrc
-make all
-klay setup 1.0.0
-klay init 1.0.0
-klay start
-```
-Default Shell : bash
-```
-echo "export PATH=\$PATH:`pwd`" >> ~/.bashrc
-source ~/.bashrc
-make all
-klay setup 1.0.0
-klay init 1.0.0
-klay start
-```
 
-## Test Deploy
+
+```
+cd klaytn
+make all
+echo "export PATH=\$PATH:`pwd`" >> ~/.profile
+source ~/.profile
+make all
+klay setup 1.0.0
+klay init 1.0.0
+klay start
+```
+## Test with Klaytn IDE
+1. go to https://ide.klaytn.com/
+2. click third button(Deploy & run transactions)
+
+![image](https://user-images.githubusercontent.com/54879931/167826231-f7ac9298-2a39-4153-bef0-b5cb0f51b9c9.png)
+
+3. set the environment to Web3 Provider & click OK button
+
+<img src="https://user-images.githubusercontent.com/54879931/167827526-a3988313-8d5d-4d17-b6d8-3c1ef275a760.png" width="300" height="300"/>
+
+## Test with truffle
 
 ```
 cd truffletest
