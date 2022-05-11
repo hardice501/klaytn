@@ -28,6 +28,7 @@ import (
 	"math/big"
 	"strconv"
 
+	"github.com/ethereum/go-ethereum/crypto/bls12381"
 	"github.com/klaytn/klaytn/api/debug"
 	"github.com/klaytn/klaytn/blockchain/types"
 	"github.com/klaytn/klaytn/blockchain/types/accountkey"
@@ -87,6 +88,9 @@ var PrecompiledContractsConstantinople = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{11}): &validateSender{},
 	common.BytesToAddress([]byte{19}): &mimc7{},
 	common.BytesToAddress([]byte{20}): &poseidon{},
+	common.BytesToAddress([]byte{21}): &bls12381GtMul{},
+	common.BytesToAddress([]byte{22}): &bls12381GtAdd{},
+	common.BytesToAddress([]byte{23}): &bls12381PairingCmpGt{},
 }
 
 // DO NOT USE 0x3FD, 0x3FE, 0x3FF ADDRESSES BEFORE ISTANBUL CHANGE ACTIVATED.
@@ -107,6 +111,9 @@ var PrecompiledContractsIstanbul = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{3, 255}): &validateSender{},
 	common.BytesToAddress([]byte{19}):     &mimc7{},
 	common.BytesToAddress([]byte{20}):     &poseidon{},
+	common.BytesToAddress([]byte{21}):     &bls12381GtMul{},
+	common.BytesToAddress([]byte{22}):     &bls12381GtAdd{},
+	common.BytesToAddress([]byte{23}):     &bls12381PairingCmpGt{},
 }
 
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
@@ -666,4 +673,122 @@ func (c *validateSender) validateSender(input []byte, picker types.AccountKeyPic
 	}
 
 	return nil
+}
+
+var (
+	errBLS12381InvalidInputLength          = errors.New("invalid input length")
+	errBLS12381InvalidFieldElementTopBytes = errors.New("invalid field element top bytes")
+	errBLS12381G1PointSubgroup             = errors.New("g1 point is not on correct subgroup")
+	errBLS12381G2PointSubgroup             = errors.New("g2 point is not on correct subgroup")
+)
+
+type bls12381GtAdd struct{}
+
+func (c *bls12381GtAdd) GetRequiredGasAndComputationCost(input []byte) (uint64, uint64) {
+	return 800, 80
+}
+func (c *bls12381GtAdd) Run(input []byte, contract *Contract, evm *EVM) ([]byte, error) {
+	// Implements EIP-2537 GtAdd precompile logic
+	// > Gt multiplication call expects `1152` bytes as an input that is interpreted as byte concatenation of encoding of two Gt point (`576` bytes)
+	// > Output is an encoding of multiexponentiation operation result - single Gt point (`576` bytes).
+	if len(input) != 1152 {
+		return nil, errBLS12381InvalidInputLength
+	}
+	g := bls12381.NewGT()
+
+	p0, _ := g.FromBytes(input[:576])
+	p1, _ := g.FromBytes(input[576:])
+
+	g.Mul(p0, p0, p1)
+	out := g.ToBytes(p0)
+
+	return out, nil
+}
+
+type bls12381GtMul struct{}
+
+func (c *bls12381GtMul) GetRequiredGasAndComputationCost(input []byte) (uint64, uint64) {
+	return uint64(1826967), 10000000
+}
+func (c *bls12381GtMul) Run(input []byte, contract *Contract, evm *EVM) ([]byte, error) {
+	// Implements EIP-2537 GtMul precompile logic
+	// > Gt multiplication call expects `608` bytes as an input that is interpreted as byte concatenation of encoding of Gt point (`576` bytes) and encoding of a scalar value (`32` bytes).
+	// > Output is an encoding of multiexponentiation operation result - single Gt point (`576` bytes).
+	if len(input) != 608 {
+		return nil, errBLS12381InvalidInputLength
+	}
+	g := bls12381.NewGT()
+	gt, _ := g.FromBytes(input[:576])
+	scalar := new(big.Int).SetBytes(input[576:])
+	g.Exp(gt, gt, scalar)
+	out := g.ToBytes(gt)
+
+	return out, nil
+}
+
+type bls12381PairingCmpGt struct{}
+
+// RequiredGas returns the gas required to execute the pre-compiled contract.
+func (c *bls12381PairingCmpGt) GetRequiredGasAndComputationCost(input []byte) (uint64, uint64) {
+	return (115000 + uint64(len(input)/384)*23000), (100000 + uint64(len(input)/384)*2000)
+}
+
+func (c *bls12381PairingCmpGt) Run(input []byte, contract *Contract, evm *EVM) ([]byte, error) {
+	// Implements EIP-2537 Pairing precompile logic.
+	// > Pairing call expects `384*k + 576` bytes as an inputs. 384*k bytes are interpreted as byte concatenation of `k` slices. last 576 bytes data is Gt which compare with pairing result
+	// Each k slice has the following structure:
+	// > - `128` bytes of G1 point encoding
+	// > - `256` bytes of G2 point encoding
+	// > Output is a `32` bytes where last single byte is `0x01` if multiplicative identity in a pairing target field is equal to Gt point and `0x00` otherwise
+	// > (which is equivalent of Big Endian encoding of Solidity values `uint256(1)` and `uin256(0)` respectively).
+	p_len := (len(input) - 576)
+	k := p_len / 384
+	if (len(input)-576) <= 0 || (len(input)-576)%384 != 0 || len(input)-384*k != 576 {
+		return nil, errBLS12381InvalidInputLength
+	}
+
+	// Initialize BLS12-381 pairing engine
+	e := bls12381.NewPairingEngine()
+	g1, g2, gt := e.G1, e.G2, bls12381.NewGT()
+
+	// Decode pairs
+	for i := 0; i < k; i++ {
+		off := 384 * i
+		t0, t1, t2 := off, off+128, off+384
+
+		// Decode G1 point
+		p1, err := g1.DecodePoint(input[t0:t1])
+		if err != nil {
+			return nil, err
+		}
+		// Decode G2 point
+		p2, err := g2.DecodePoint(input[t1:t2])
+		if err != nil {
+			return nil, err
+		}
+
+		// 'point is on curve' check already done,
+		// Here we need to apply subgroup checks.
+		if !g1.InCorrectSubgroup(p1) {
+			return nil, errBLS12381G1PointSubgroup
+		}
+		if !g2.InCorrectSubgroup(p2) {
+			return nil, errBLS12381G2PointSubgroup
+		}
+
+		// Update pairing engine with G1 and G2 ponits
+		e.AddPair(p1, p2)
+	}
+
+	fe12, _ := gt.FromBytes(input[384*k:])
+
+	// Prepare 32 byte output
+	out := make([]byte, 32)
+
+	// Compute pairing and set the result
+
+	if e.Result().Equal(fe12) {
+		out[31] = 1
+	}
+	return out, nil
 }
