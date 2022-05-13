@@ -166,3 +166,83 @@ function callposeidon(bytes32[] memory data) public returns (bytes32 result) {
   }
 }
 ```
+
+## How to Use PreCompiled Contract BLS in Solidity
+```
+contract Bls {
+    event showbytes32(bytes32 output);
+    event showbytes32arr(bytes32[] output);
+
+    // General Bls12-381 format
+    // each elements are 48 bytes
+    // g1Affine :  96 bytes  (2 elements) -> g1.x, g1.y
+    // g2Affine : 192 bytes  (4 elements) -> g2.x0, g2.x1, g2.y0, g2.y1
+    //       gt : 576 bytes (12 elements) -> gt.c0, gt.c1 ... gt.c11
+
+    // Go-eth Bls12-381 format
+    // g1,g2's each elements are 64 bytes -> append 16 bytes of 0 to the front
+    // g1 : 128 bytes -> [  concat([0u8;16], g1.x[:16]), g1.x[16:48], concat([0u8;16], g1.y[:16]), g1.y[16:48]  ]
+    // g2 : 256 bytes -> in the same way as g1
+    // gt : 576 bytes -> [ gt.c0[:32], concat(gt.c0[32:], gt.c1[:16]), gt.c1[16:], .... ]
+
+    function ParingCmp(bytes32[] memory inputs) public returns (bytes32 result){
+        // result = (e(a,A) + e(b,B) + e(c,C)... == gt)
+
+        // inputs index      elements
+        //  0 ~ 12*k-1     [(g1,  g2)]      // k : num of g1,g2 pair
+        //  12*k ~              gt
+        assembly{
+            let len := mload(inputs)
+            let memPtr := mload(0x40)
+            let success := call(gas(), 0x17, 0, add(inputs, 0x20), mul(len, 0x20), memPtr, 0x20)
+            switch success case 0 {
+                revert(0, 0)
+            }
+            default {
+                result := mload(memPtr)
+            }
+        }
+        emit showbytes32(result);
+    }
+
+    function GtAdd(bytes32[] memory inputs) public returns (bytes32[] memory result){
+        // result = (gt_1 + gt_2)
+
+        // inputs index      elements
+        //     0 ~ 17          gt_1
+        //    18 ~             gt_2
+        assembly{
+            let len := mload(inputs)
+            result := mload(0x40)
+            mstore(result, 0x12)
+            let success := call(gas(), 0x16, 0, add(inputs, 0x20), mul(len, 0x20), add(result, 0x20), mul(0x12, 0x20))
+            switch success case 0 {
+                revert(0, 0)
+            }
+            mstore(0x40, add(result, add(0x20, mul(0x12, 0x20))))
+        }
+        emit showbytes32arr(result);
+    }
+
+    function GtMul(bytes32[] memory inputs) public returns (bytes32[] memory result){
+        // result = (gt^scaler)       // scaler : 32 bytes
+
+
+        // inputs index      elements
+        //    0 ~ 17            gt
+        //   17 ~              scaler
+        assembly{
+            let len := mload(inputs)
+            result := mload(0x40)
+            mstore(result, 0x12)
+            let success := call(gas(), 0x15, 0, add(inputs, 0x20), mul(len, 0x20), add(result, 0x20), mul(0x12, 0x20))
+            switch success case 0 {
+                revert(0, 0)
+            }
+            mstore(0x40, add(result, add(0x20, mul(0x12, 0x20))))
+        }
+        emit showbytes32arr(result);
+    }
+}
+
+```
